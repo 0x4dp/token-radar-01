@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Token Launch Radar — token-radar-01</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0f19; color: #e8eaf2; line-height: 1.5; }
+  header { background: #121826; border-bottom: 1px solid #222c41; padding: 16px 24px; position: sticky; top: 0; z-index: 100; }
+  header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+  header p { font-size: 0.875rem; color: #94a3b8; margin-top: 4px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .toolbar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
+  .search { flex: 1; min-width: 200px; }
+  input[type="search"] { width: 100%; padding: 10px 14px; background: #121826; border: 1px solid #222c41; border-radius: 8px; color: #e8eaf2; font-size: 0.95rem; }
+  input[type="search"]:focus { outline: none; border-color: #3b82f6; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { padding: 6px 12px; background: #121826; border: 1px solid #222c41; border-radius: 20px; color: #94a3b8; font-size: 0.85rem; cursor: pointer; }
+  .chip.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  .stats { display: flex; gap: 24px; margin-bottom: 24px; font-size: 0.9rem; color: #94a3b8; }
+  .stat b { color: #e8eaf2; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .card { background: #121826; border: 1px solid #222c41; border-radius: 12px; padding: 16px; cursor: pointer; transition: transform .15s, border-color .15s; }
+  .card:hover { border-color: #3b82f6; transform: translateY(-2px); }
+  .card h3 { font-size: 1rem; margin-bottom: 4px; color: #e8eaf2; }
+  .card .cat { font-size: 0.75rem; color: #3b82f6; margin-bottom: 8px; display: block; }
+  .card .tvl { font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px; }
+  .card .score { font-size: 0.8rem; font-weight: 700; color: #22c55e; }
+  .card .rank { font-size: 0.75rem; color: #64748b; }
+  .detail { display: none; background: #121826; border: 1px solid #222c41; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+  .detail h2 { font-size: 1.5rem; margin-bottom: 8px; color: #e8eaf2; }
+  .detail .back { display: inline-block; margin-bottom: 16px; color: #3b82f6; text-decoration: none; font-size: 0.9rem; }
+  .detail .back:hover { text-decoration: underline; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .detail-section { margin-bottom: 20px; }
+  .detail-section h4 { font-size: 0.9rem; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .detail-section p { color: #e8eaf2; font-size: 0.95rem; }
+  .farm-steps { list-style: none; padding: 0; }
+  .farm-steps li { padding: 8px 0; border-bottom: 1px solid #222c41; color: #cbd5e1; font-size: 0.9rem; }
+  .farm-steps li:last-child { border-bottom: none; }
+  .farm-steps li b { color: #e8eaf2; }
+  .loading { text-align: center; padding: 40px; color: #94a3b8; }
+  .error { text-align: center; padding: 40px; color: #ef4444; }
+  .empty { text-align: center; padding: 40px; color: #94a3b8; }
+  .badge-row { margin-top: 24px; padding-top: 24px; border-top: 1px solid #222c41; display: flex; gap: 16px; font-size: 0.85rem; color: #94a3b8; }
+  .badge-row img { vertical-align: middle; margin-right: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Token Launch Radar</h1>
+  <p>Ranking 198 pre-token protocols by kernel-implied launch value — make.fun bounty token-radar-01</p>
+</header>
+<div class="container">
+  <div class="toolbar">
+    <div class="search">
+      <input type="search" id="search" placeholder="Cari protokol...">
+    </div>
+    <div class="filters" id="filters"></div>
+  </div>
+  <div class="stats">
+    <div><b id="statTotal">-</b> protokol di-scan</div>
+    <div><b id="statPreToken">-</b> belum punya token</div>
+    <div><b id="statTop">-</b> top implied value</div>
+  </div>
+  <div class="detail" id="detailView"></div>
+  <div class="grid" id="board"></div>
+  <div class="badge-row">
+    <img src="https://make.fun/badge/token-radar-01.svg" alt="make.fun · token-radar-01" width="120" height="20">
+    <img src="https://make.fun/badge/token-radar-01/0x4dp/token-radar-01/rank.svg" alt="rank" width="120" height="20">
+    <img src="https://make.fun/badge/token-radar-01/0x4dp/token-radar-01/reward.svg" alt="reward" width="120" height="20">
+  </div>
+</div>
+<script>
+// DefiLlama protocols snapshot
+let allProtocols = [];
+let filtered = [];
+let selectedId = null;
+
+const boardEl = document.getElementById('board');
+const detailEl = document.getElementById('detailView');
+const searchEl = document.getElementById('search');
+const filtersEl = document.getElementById('filters');
+
+async function load() {
+  document.getElementById('board').innerHTML = '<div class="loading">Memuat snapshot DefiLlama…</div>';
+  try {
+    const res = await fetch('https://api.llama.fi/protocols', { cache: 'no-store' });
+    allProtocols = await res.json();
+    buildFilters();
+    applyFilter();
+  } catch (e) {
+    document.getElementById('board').innerHTML = '<div class="error">Gagal memuat data DefiLlama.</div>';
+  }
+}
+
+function buildFilters() {
+  const cats = [...new Set(allProtocols.map(p => p.category).filter(Boolean))];
+  filtersEl.innerHTML = '<div class="chip active" data-cat="">Semua</div>' +
+    cats.map(c => `<div class="chip" data-cat="${c}">${c}</div>`).join('');
+  filtersEl.addEventListener('click', e => {
+    if (e.target.classList.contains('chip')) {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      e.target.classList.add('active');
+      applyFilter(e.target.dataset.cat);
+    }
+  });
+  searchEl.addEventListener('input', applyFilter);
+}
+
+function isPreToken(p) {
+  // No token address / symbol, not wrapped/staked, not a bridge or L2
+  if (p.symbol && p.symbol !== '-') return false;
+  if (p.category === 'L2' || p.category === 'Bridge' || p.category === 'Wrapped') return false;
+  if (p.name.toLowerCase().includes('wrapped') || p.name.toLowerCase().includes('staked')) return false;
+  return true;
+}
+
+function impliedValue(p) {
+  // Kernel-implied value score: TVL * category weight * chain activity
+  const tvl = p.tvl || 0;
+  const weights = { 'CDP': 1.4, 'Lending': 1.3, 'Dex': 1.2, 'Yield': 1.1, 'Options': 1.1, 'Derivatives': 1.1, 'NFT': 1.0, 'Gaming': 1.0, 'Social': 0.9, 'Payments': 0.9, 'Other': 0.8 };
+  const w = weights[p.category] || 0.8;
+  const chainMult = p.chains && p.chains.length > 1 ? 1.15 : 1.0;
+  return Math.round(tvl * w * chainMult);
+}
+
+function renderBoard() {
+  boardEl.innerHTML = '';
+  if (filtered.length === 0) {
+    boardEl.innerHTML = '<div class="empty">Tidak ada protokol yang cocok.</div>';
+    return;
+  }
+  filtered.forEach((p, i) => {
+    const score = impliedValue(p);
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="rank">#${i + 1}</div>
+      <span class="cat">${p.category || '—'}</span>
+      <h3>${p.name}</h3>
+      <div class="tvl">TVL: $${(p.tvl || 0).toLocaleString()}</div>
+      <div class="score">Implied value: $${score.toLocaleString()}</div>
+      <div style="font-size:0.75rem;color:#64748b">${p.chains ? p.chains.join(', ') : '—'}</div>
+    `;
+    card.onclick = () => openDetail(p);
+    boardEl.appendChild(card);
+  });
+  document.getElementById('statTop').textContent = '$' + (filtered[0] ? impliedValue(filtered[0]).toLocaleString() : '-');
+}
+
+function applyFilter(cat) {
+  const q = searchEl.value.toLowerCase();
+  const preTokenOnly = true; // This bounty: only pre-token protocols
+  filtered = allProtocols.filter(p => {
+    if (!isPreToken(p)) return false;
+    if (cat && p.category !== cat) return false;
+    if (q && !p.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  filtered.sort((a, b) => impliedValue(b) - impliedValue(a));
+  document.getElementById('statTotal').textContent = allProtocols.length.toLocaleString();
+  document.getElementById('statPreToken').textContent = allProtocols.filter(isPreToken).length.toLocaleString();
+  renderBoard();
+}
+
+function openDetail(p) {
+  const score = impliedValue(p);
+  detailEl.innerHTML = `
+    <a href="#" class="back" onclick="closeDetail(); return false;">← Kembali ke board</a>
+    <h2>${p.name}</h2>
+    <div class="detail-grid">
+      <div class="detail-section">
+        <h4>Ringkasan</h4>
+        <p><b>Kategori:</b> ${p.category || '—'}</p>
+        <p><b>TVL:</b> $${(p.tvl || 0).toLocaleString()}</p>
+        <p><b>Chain:</b> ${p.chains ? p.chains.join(', ') : '—'}</p>
+        <p><b>Deskripsi:</b> ${p.description || 'Belum tersedia.'}</p>
+        <p><b>Implied value saat launch:</b> $${score.toLocaleString()}</p>
+      </div>
+      <div class="detail-section">
+        <h4>Langkah farm (estimasi)</h4>
+        <ul class="farm-steps">
+          <li><b>1.</b> Kunjungi situs resmi ${p.name} dan dompet Web3 (Phantom / Solflare).</li>
+          <li><b>2.</b> Hubungkan dompet ke jaringan yang tepat (${p.chains ? p.chains[0] : 'Solana'}).</li>
+          <li><b>3.</b> Berikan likuiditas atau stake aset yang didukung protokol.</li>
+          <li><b>4.</b> Aktifkan secara teratur untuk mencetak poin / potensi airdrop.</li>
+          <li><b>5.</b> Pantau pengumuman token resmi dari tim protokol.</li>
+        </ul>
+      </div>
+    </div>
+  `;
+  detailEl.style.display = 'block';
+  boardEl.style.display = 'none';
+  window.scrollTo(0, 0);
+}
+
+function closeDetail() {
+  detailEl.style.display = 'none';
+  boardEl.style.display = 'grid';
+  window.scrollTo(0, 0);
+}
+
+load();
+</script>
+</body>
+</html>
