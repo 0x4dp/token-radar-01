@@ -10,3 +10,11 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 console.log('Token Launch Radar entrypoint loaded');
+
+// Radar state: discovered pre-token protocols
+const radar = {
+  protocols: [],
+  lastUpdated: null,
+};
+
+export { radar, DASHBOARD_URL };
